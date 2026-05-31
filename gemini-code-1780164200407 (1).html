@@ -1,0 +1,146 @@
+<div class="cart-overlay" id="cart-overlay"></div>
+    <div class="cart-drawer" id="cart-drawer">
+        <div class="cart-header">
+            <h2>Your Shopping Bag</h2>
+            <button class="close-cart" id="close-cart">&times;</button>
+        </div>
+        <div class="cart-items" id="cart-items-container">
+            </div>
+        <div class="cart-footer">
+            <div class="cart-total">
+                <span>Total:</span>
+                <span id="cart-total-price">£0.00</span>
+            </div>
+            <div id="paypal-button-container" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Beads & Bloom. Created with care.</p>
+    </footer>
+
+    <script src="https://www.paypal.com/sdk/js?client-id=test&currency=GBP"></script>
+
+    <script>
+        let cart = [];
+
+        // DOM elements
+        const cartDrawer = document.getElementById('cart-drawer');
+        const cartOverlay = document.getElementById('cart-overlay');
+        const cartTrigger = document.getElementById('cart-trigger');
+        const closeCartBtn = document.getElementById('close-cart');
+        const addToCartButtons = document.querySelectorAll('.add-to-cart-btn');
+        const cartItemsContainer = document.getElementById('cart-items-container');
+        const cartCountElement = document.getElementById('cart-count');
+        const cartTotalPriceElement = document.getElementById('cart-total-price');
+
+        // Drawer Open/Close
+        function toggleCart() {
+            cartDrawer.classList.toggle('open');
+            cartOverlay.classList.toggle('open');
+        }
+        cartTrigger.addEventListener('click', toggleCart);
+        closeCartBtn.addEventListener('click', toggleCart);
+        cartOverlay.addEventListener('click', toggleCart);
+
+        // Add to Cart
+        addToCartButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const productCard = e.target.closest('.product-card');
+                const id = productCard.getAttribute('data-id');
+                const name = productCard.getAttribute('data-name');
+                const price = parseFloat(productCard.getAttribute('data-price'));
+                addItemToCart(id, name, price);
+                toggleCart();
+            });
+        });
+
+        function addItemToCart(id, name, price) {
+            const existingItem = cart.find(item => item.id === id);
+            if (existingItem) { existingItem.quantity++; } 
+            else { cart.push({ id, name, price, quantity: 1 }); }
+            updateCartUI();
+        }
+
+        function changeQuantity(id, amount) {
+            const item = cart.find(item => item.id === id);
+            if (!item) return;
+            item.quantity += amount;
+            if (item.quantity <= 0) { cart = cart.filter(item => item.id !== id); }
+            updateCartUI();
+        }
+
+        // Get total cart value for PayPal
+        function getCartTotal() {
+            return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2);
+        }
+
+        function updateCartUI() {
+            cartItemsContainer.innerHTML = '';
+            let totalItems = 0;
+            let totalPrice = 0;
+
+            if (cart.length === 0) {
+                cartItemsContainer.innerHTML = '<p style="color: #61554d; text-align: center; margin-top: 40px;">Your cart is empty.</p>';
+            }
+
+            cart.forEach(item => {
+                totalItems += item.quantity;
+                totalPrice += (item.price * item.quantity);
+
+                const itemElement = document.createElement('div');
+                itemElement.classList.add('cart-item');
+                itemElement.innerHTML = `
+                    <div class="cart-item-details">
+                        <h4>${item.name}</h4>
+                        <p>£${item.price.toFixed(2)}</p>
+                    </div>
+                    <div class="cart-item-qty">
+                        <button class="qty-btn" onclick="changeQuantity('${item.id}', -1)">-</button>
+                        <span>${item.quantity}</span>
+                        <button class="qty-btn" onclick="changeQuantity('${item.id}', 1)">+</button>
+                    </div>
+                `;
+                cartItemsContainer.appendChild(itemElement);
+            });
+
+            cartCountElement.textContent = totalItems;
+            cartTotalPriceElement.textContent = `£${totalPrice.toFixed(2)}`;
+        }
+
+        // 3. RENDER THE PAYPAL BUTTONS
+        paypal.Buttons({
+            // Check if cart has items before opening payment window
+            onClick: function(data, actions) {
+                if (cart.length === 0) {
+                    alert("Your cart is empty!");
+                    return actions.reject();
+                }
+                return actions.resolve();
+            },
+            // Set up the transaction details
+            createOrder: function(data, actions) {
+                return actions.order.create({
+                    purchase_units: [{
+                        amount: {
+                            currency_code: 'GBP',
+                            value: getCartTotal() // Passes dynamic total
+                        }
+                    }]
+                });
+            },
+            // Capture the funds when transaction completes
+            onApprove: function(data, actions) {
+                return actions.order.capture().then(function(details) {
+                    alert('Thank you for your order, ' + details.payer.name.given_name + '! 🎉');
+                    cart = []; // Clear the cart
+                    updateCartUI();
+                    toggleCart();
+                });
+            },
+            onError: function(err) {
+                console.error('PayPal Error:', err);
+                alert('Something went wrong with the payment processing.');
+            }
+        }).render('#paypal-button-container');
+    </script>
